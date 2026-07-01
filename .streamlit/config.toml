@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#02005e" # Your brand's main color
+backgroundColor = "#526D82" # Background color
+secondaryBackgroundColor = "#DDE6ED" # Sidebar/widget background
+textColor = "#000000" # Main text color
+font = "sans serif" # 'sans serif', 'serif', or 'monospace'

@@ -6,3 +6,4 @@ langchain-huggingface
 python-dotenv
 chromadb
 huggingface-hub
+faiss-cpu

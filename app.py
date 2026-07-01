@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 # Core LangChain imports (Swapped out Chroma for FAISS to ensure cloud compatibility)
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
+from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_groq import ChatGroq
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
@@ -207,30 +207,30 @@ def setup_rag():
         with open("knowledge_base.txt", "r", encoding="utf-8") as f:
             raw_text = f.read()
         
-        # 2. Production-grade chunking (Breaks data cleanly without losing meaning)
-        from langchain_text_splitters import RecursiveCharacterTextSplitter
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=600,       # Targets single paragraphs/topics
-            chunk_overlap=100,    # Ensures facts aren't cut mid-sentence
-            separators=["\n\n", "\n", ".", " "]
-        )
-        
-        # 3. Create searchable documents
-        texts = text_splitter.split_text(raw_text)
-        docs = [Document(page_content=t) for t in texts]
-        
+        # 2. Split into clean chunks
+        paragraphs = [p.strip() for p in raw_text.split("\n\n") if p.strip()]
+        if len(paragraphs) <= 1:
+            paragraphs = [line.strip() for line in raw_text.split("\n") if line.strip()]
+            
+        docs = [Document(page_content=t) for t in paragraphs]
         if not docs:
             return None
 
-        # 4. Process and index your knowledge base
-        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        vector_db = FAISS.from_documents(docs, embeddings)
+        # 3. Use the updated, non-deprecated class from langchain_huggingface
+        from langchain_huggingface import HuggingFaceEndpointEmbeddings
         
-        # Pull the top 3 most relevant segments for every question
-        retriever = vector_db.as_retriever(search_kwargs={"k": 3})
+        embeddings = HuggingFaceEndpointEmbeddings(
+            model="sentence-transformers/all-MiniLM-L6-v2",
+            huggingfacehub_api_token=os.getenv("HF_TOKEN", "") # Make sure HF_TOKEN is in your .env file if required
+        )
         
-        # 5. Initialize the high-end inference model
-        llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.2)
+        # 4. Use the native InMemory store
+        from langchain_core.vectorstores import InMemoryVectorStore
+        vector_db = InMemoryVectorStore.from_documents(docs, embeddings)
+        retriever = vector_db.as_retriever(search_kwargs={"k": 2})
+        
+        # 5. Initialize the inference model
+        llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1)
         
         # 6. Ultra-Strict System Prompt
         template = """You are the official corporate AI support agent for SafeX Solutions.
@@ -239,7 +239,7 @@ def setup_rag():
         
         RULES:
         1. Base your answer completely on the Corporate Context. If the context mentions specific services, list them clearly with professional detail.
-        2. Do NOT summarize into vague one-sentence fluff answers (e.g., do NOT just say "We offer services"). Be thorough and helpful.
+        2. Do NOT summarize into vague one-sentence fluff answers. Be thorough, helpful, and descriptive based on facts.
         3. If the user asks a question that is completely missing from the Corporate Context below, reply exactly with: "I'm sorry, but that details is out of scope regarding our verified services framework."
         4. Never say 'according to the text' or 'in the provided context'. Act like a real human corporate agent.
         
@@ -252,7 +252,7 @@ def setup_rag():
         prompt = ChatPromptTemplate.from_template(template)
         return ({"context": retriever, "question": RunnablePassthrough()} | prompt | llm | StrOutputParser())
     except Exception as e:
-        print(f"RAG Initialization Error: {e}")
+        print(f"RAG System Exception Log: {str(e)}")
         return None
 
 rag_chain = setup_rag()

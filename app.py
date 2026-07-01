@@ -1,3 +1,10 @@
+import asyncio
+import sys
+
+# Fix for Windows Python 3.11+ Asyncio Event Loop Bug
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 import streamlit as st
 import os
 from dotenv import load_dotenv

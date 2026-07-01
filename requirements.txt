@@ -3,6 +3,7 @@ langchain-groq
 langchain-text-splitters
 langchain-chroma
 langchain-huggingface
+langchain-community
 python-dotenv
 chromadb
 huggingface-hub

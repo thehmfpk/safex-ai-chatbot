@@ -1,39 +1,48 @@
 import asyncio
 import sys
 
-# Fix for Windows Python 3.11+ Asyncio Event Loop Bug
+# 1. Fix for Windows Python 3.11+ Asyncio Event Loop Bug
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import streamlit as st
+from PIL import Image
 import os
+import base64
 from dotenv import load_dotenv
 
-# Core LangChain imports
+# Core LangChain imports (Swapped out Chroma for FAISS to ensure cloud compatibility)
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
-import base64
+# 2. Configure the page settings (ONLY CALL THIS ONCE AT THE TOP)
+if os.path.exists("logo.png"):
+    browser_tab_logo = Image.open("logo.png")
+else:
+    browser_tab_logo = "⚡"
 
+st.set_page_config(
+    page_title="SafeX AI Support", 
+    page_icon=browser_tab_logo, 
+    layout="centered"
+)
+
+# Helper function to load logo image safely
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
             return f"data:image/png;base64,{base64.b64encode(img_file.read()).decode()}"
-    return "https://img.icons8.com/fluency/48/shield.png" # Fallback shield if image is missing
+    return "https://img.icons8.com/fluency/48/shield.png"
 
-# Get the base64 string for your logo
 logo_base64 = get_base64_image("logo.png")
-# Load background configurations safely
 load_dotenv()
 
 # --- PREMIUM SAAS LIVE CHAT PLATFORM DESIGN ---
-st.set_page_config(page_title="SafeX AI Support", page_icon="⚡", layout="centered")
-
 st.markdown("""
     <style>
     /* 1. Global Reset & Full Bleed Layout Setup */
@@ -154,7 +163,7 @@ st.markdown("""
         border: 1px solid rgba(255, 255, 255, 0.15);
     }
 
-    /* 4. Chat Feed Body (With Top Padding to prevent overlap behind Fixed Header) */
+    /* 4. Chat Feed Body */
     .block-container { 
         padding: 0px !important; 
     }
@@ -182,7 +191,7 @@ st.markdown("""
     }
     
     div[data-testid="stChatMessage"]:has(div[data-testid="chatavatardefault-user"]) p {
-        color: #9DB2BF !important;
+        color: #FFFFFF !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -194,29 +203,45 @@ def setup_rag():
         return None
     
     try:
+        # 1. Read the text file safely
         with open("knowledge_base.txt", "r", encoding="utf-8") as f:
             raw_text = f.read()
         
-        paragraphs = [p.strip() for p in raw_text.split("\n\n") if p.strip()]
-        if len(paragraphs) <= 1:
-            paragraphs = [line.strip() for line in raw_text.split("\n") if line.strip()]
-
-        docs = [Document(page_content=txt) for txt in paragraphs]
+        # 2. Production-grade chunking (Breaks data cleanly without losing meaning)
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=600,       # Targets single paragraphs/topics
+            chunk_overlap=100,    # Ensures facts aren't cut mid-sentence
+            separators=["\n\n", "\n", ".", " "]
+        )
+        
+        # 3. Create searchable documents
+        texts = text_splitter.split_text(raw_text)
+        docs = [Document(page_content=t) for t in texts]
+        
         if not docs:
             return None
 
+        # 4. Process and index your knowledge base
         embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        vector_db = Chroma.from_documents(docs, embeddings)
-        retriever = vector_db.as_retriever(search_kwargs={"k": 2})
+        vector_db = FAISS.from_documents(docs, embeddings)
         
-        llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.3)
+        # Pull the top 3 most relevant segments for every question
+        retriever = vector_db.as_retriever(search_kwargs={"k": 3})
         
-        template = """You are an elite customer support specialist at SafeX Solutions Live Chat.
+        # 5. Initialize the high-end inference model
+        llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.2)
         
-        CONVERSATIONAL RULES:
-        1. Welcome the customer warmly if they say hello or greet you.
-        2. If they say 'no', 'thanks', or wish to exit, say goodbye politely.
-        3. Provide clean, professional answers using the verified corporate context below. Do NOT reference 'documents' or 'database'.
+        # 6. Ultra-Strict System Prompt
+        template = """You are the official corporate AI support agent for SafeX Solutions.
+        
+        Your ONLY job is to answer the user's question using the verified corporate context provided below.
+        
+        RULES:
+        1. Base your answer completely on the Corporate Context. If the context mentions specific services, list them clearly with professional detail.
+        2. Do NOT summarize into vague one-sentence fluff answers (e.g., do NOT just say "We offer services"). Be thorough and helpful.
+        3. If the user asks a question that is completely missing from the Corporate Context below, reply exactly with: "I'm sorry, but that details is out of scope regarding our verified services framework."
+        4. Never say 'according to the text' or 'in the provided context'. Act like a real human corporate agent.
         
         Corporate Context:
         {context}
@@ -226,7 +251,8 @@ def setup_rag():
         
         prompt = ChatPromptTemplate.from_template(template)
         return ({"context": retriever, "question": RunnablePassthrough()} | prompt | llm | StrOutputParser())
-    except:
+    except Exception as e:
+        print(f"RAG Initialization Error: {e}")
         return None
 
 rag_chain = setup_rag()
@@ -252,7 +278,6 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-
 # Container wrapping the scrollable chat feed elements
 st.markdown('<div class="chat-body-container">', unsafe_allow_html=True)
 
@@ -275,7 +300,7 @@ if user_prompt := st.chat_input("Message SafeX Solutions..."):
                 try:
                     response = rag_chain.invoke(user_prompt)
                     st.markdown(response)
-                except:
+                except Exception as e:
                     response = "I am currently experiencing a brief connectivity glitch. Please try your question again in a moment."
                     st.markdown(response)
             else:

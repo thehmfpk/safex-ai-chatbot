@@ -1,312 +1,243 @@
-import asyncio
-import sys
-
-# 1. Fix for Windows Python 3.11+ Asyncio Event Loop Bug
-if sys.platform == 'win32':
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-import streamlit as st
-from PIL import Image
 import os
-import base64
+import json
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
-
-# Core LangChain imports (Swapped out Chroma for FAISS to ensure cloud compatibility)
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.documents import Document
+from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_groq import ChatGroq
-from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
-# 2. Configure the page settings (ONLY CALL THIS ONCE AT THE TOP)
-if os.path.exists("logo.png"):
-    browser_tab_logo = Image.open("logo.png")
-else:
-    browser_tab_logo = "⚡"
-
-st.set_page_config(
-    page_title="SafeX AI Support", 
-    page_icon=browser_tab_logo, 
-    layout="centered"
-)
-
-# Helper function to load logo image safely
-def get_base64_image(image_path):
-    if os.path.exists(image_path):
-        with open(image_path, "rb") as img_file:
-            return f"data:image/png;base64,{base64.b64encode(img_file.read()).decode()}"
-    return "https://img.icons8.com/fluency/48/shield.png"
-
-logo_base64 = get_base64_image("logo.png")
 load_dotenv()
 
-# --- PREMIUM SAAS LIVE CHAT PLATFORM DESIGN ---
-st.markdown("""
-    <style>
-    /* 1. Global Reset & Full Bleed Layout Setup */
-    [data-testid="stAppViewContainer"] {
-        padding: 0px !important;
-        background-color: #F8FAFC !important;
-    }
-    [data-testid="stHeader"] { 
-        visibility: hidden; 
-        height: 0px !important; 
-    }
-    footer { 
-        visibility: hidden; 
-    }
-    
-    /* 2. Sleek Smartphone Frame Mockup */
-    .stApp { 
-        max-width: 450px; 
-        margin: 20px auto !important; 
-        border: 1px solid #E2E8F0;
-        border-radius: 24px;
-        min-height: 85vh;
-        padding: 0px !important;
-        background-color: #FFFFFF;
-        box-shadow: 0px 20px 40px rgba(15, 23, 42, 0.08);
-        overflow-x: hidden;
-    }
+app = FastAPI()
 
-    /* 3. High-End FIXED Tech Corporate Header (Locks at the Top) */
-    .chat-header-saas {
-        position: fixed;
-        top: 3px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 100%;
-        max-width: 450px;
-        background: #27374D;
-        padding: 25px;
-        color: #FFFFFF;
-        margin: 0px !important;
-        z-index: 99999;
-        border-top-left-radius: 22px;
-        border-top-right-radius: 22px;
-        border-bottom: 1px solid #334155;
-        box-sizing: border-box;
-    }
-    
-    .header-flex {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    
-    .header-left {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }
-    
-    .company-title-block h2 { 
-        margin: 0 !important; 
-        font-size: 17px !important; 
-        font-weight: 700 !important;
-        color: #FFFFFF !important;
-        font-family: 'Inter', system-ui, sans-serif;
-    }
-    .company-logo-badge {
-        width: 38px;
-        height: 38px;
-        border-radius: 10px;
-        background-color: transparent; 
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden; 
-    }
-    
-    .company-logo-badge img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain; 
-    }
-    .live-pulse-container {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-top: 2px;
-    }
-    
-    .pulse-dot {
-        width: 8px;
-        height: 8px;
-        background-color: #10B981;
-        border-radius: 50%;
-        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-        animation: pulse-ring 1.5s infinite;
-    }
-    
-    @keyframes pulse-ring {
-        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-        70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-    }
-    
-    .status-text {
-        font-size: 11px;
-        color: #94A3B8;
-        font-weight: 500;
-    }
-    
-    .tech-tag {
-        background-color: rgba(255, 255, 255, 0.1);
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-size: 11px;
-        font-weight: 600;
-        color: #3B82F6;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-    }
+# Mount the folder holding logo.png so the frontend can read it safely
+app.mount("/static", StaticFiles(directory="."), name="static")
 
-    /* 4. Chat Feed Body */
-    .block-container { 
-        padding: 0px !important; 
-    }
-    
-    .chat-body-container {
-        padding: 75px 20px 10px 20px !important;
-        background-color: #FFFFFF;
-    }
-    
-    /* 5. Custom Message Bubble Enhancements */
-    div[data-testid="stChatMessage"] {
-        background-color: #F1F5F9 !important;
-        border-radius: 16px !important;
-        padding: 12px 16px !important;
-        border: 1px solid #E2E8F0 !important;
-        margin-bottom: 12px;
-    }
-    
-    /* Elegant Right-side Swapping for User Bubble */
-    div[data-testid="stChatMessage"]:has(div[data-testid="chatavatardefault-user"]) {
-        flex-direction: row-reverse !important;
-        text-align: right !important;
-        background: linear-gradient(135deg, #2563EB, #1D4ED8) !important;
-        border: none !important;
-    }
-    
-    div[data-testid="stChatMessage"]:has(div[data-testid="chatavatardefault-user"]) p {
-        color: #FFFFFF !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# ================= BACKEND ENGINE INITIALIZATION =================
+retriever = None
+rag_chain = None
 
-# --- MODERN BACKGROUND DATA RETRIEVAL ---
-@st.cache_resource
-def setup_rag():
+def initialize_rag_system():
+    global retriever, rag_chain
     if not os.path.exists("knowledge_base.txt"):
-        return None
-    
+        return False
     try:
-        # 1. Read the text file safely
         with open("knowledge_base.txt", "r", encoding="utf-8") as f:
             raw_text = f.read()
-        
-        # 2. Split into clean chunks
         paragraphs = [p.strip() for p in raw_text.split("\n\n") if p.strip()]
-        if len(paragraphs) <= 1:
-            paragraphs = [line.strip() for line in raw_text.split("\n") if line.strip()]
-            
         docs = [Document(page_content=t) for t in paragraphs]
-        if not docs:
-            return None
-
-        # 3. Use the updated, non-deprecated class from langchain_huggingface
-        from langchain_huggingface import HuggingFaceEndpointEmbeddings
         
         embeddings = HuggingFaceEndpointEmbeddings(
             model="sentence-transformers/all-MiniLM-L6-v2",
-            huggingfacehub_api_token=os.getenv("HF_TOKEN", "") # Make sure HF_TOKEN is in your .env file if required
+            huggingfacehub_api_token=os.getenv("HF_TOKEN")
         )
-        
-        # 4. Use the native InMemory store
-        from langchain_core.vectorstores import InMemoryVectorStore
         vector_db = InMemoryVectorStore.from_documents(docs, embeddings)
         retriever = vector_db.as_retriever(search_kwargs={"k": 2})
         
-        # 5. Initialize the inference model
         llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1)
-        
-        # 6. Ultra-Strict System Prompt
         template = """You are the official corporate AI support agent for SafeX Solutions.
-        
-        Your ONLY job is to answer the user's question using the verified corporate context provided below.
-        
-        RULES:
-        1. Base your answer completely on the Corporate Context. If the context mentions specific services, list them clearly with professional detail.
-        2. Do NOT summarize into vague one-sentence fluff answers. Be thorough, helpful, and descriptive based on facts.
-        3. If the user asks a question that is completely missing from the Corporate Context below, reply exactly with: "I'm sorry, but that details is out of scope regarding our verified services framework."
-        4. Never say 'according to the text' or 'in the provided context'. Act like a real human corporate agent.
-        
-        Corporate Context:
-        {context}
-        
-        Customer Inquiry: {question}
-        Support Reply:"""
-        
+Corporate Context: {context}
+Customer Inquiry: {question}
+Support Reply:"""
         prompt = ChatPromptTemplate.from_template(template)
-        return ({"context": retriever, "question": RunnablePassthrough()} | prompt | llm | StrOutputParser())
+        rag_chain = ({"context": retriever, "question": RunnablePassthrough()} | prompt | llm | StrOutputParser())
+        return True
     except Exception as e:
-        print(f"RAG System Exception Log: {str(e)}")
-        return None
+        print(f"Engine connection fallback active: {e}")
+        return False
 
-rag_chain = setup_rag()
+initialize_rag_system()
 
-# --- HIGH-END PINNED TECH CORPORATE HEADER DISPLAY ---
-st.markdown(f"""
-    <div class="chat-header-saas">
-        <div class="header-flex">
-            <div class="header-left">
-                <div class="company-logo-badge">
-                    <img src="{logo_base64}" alt="SafeX Solutions Logo">
-                </div>
-                <div class="company-title-block">
-                    <h2>SafeX Solutions</h2>
-                    <div class="live-pulse-container">
-                        <div class="pulse-dot"></div>
-                        <span class="status-text">AI Support Agent</span>
+# ================= API ENDPOINT FOR MESSAGES =================
+@app.post("/api/chat")
+async def chat_endpoint(request: Request):
+    global rag_chain
+    data = await request.json()
+    user_message = data.get("message", "")
+    
+    if not rag_chain:
+        if not initialize_rag_system():
+            return {"reply": "⚠️ System maintenance window active. Please check network connections."}
+            
+    try:
+        bot_response = rag_chain.invoke(user_message)
+    except Exception as e:
+        bot_response = f"Connection error: {str(e)}"
+        
+    return {"reply": bot_response}
+
+# ================= BEAUTIFIED FRONTEND SERVING =================
+@app.get("/", response_class=HTMLResponse)
+async def get_ui():
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="icon" href="/static/logo.png" type="image/png">
+        <title>SafeX Solutions Agent</title>
+        <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+            body, html { height: 100vh; width: 100vw; background: #27374D; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+            
+            /* Responsive Phone Frame Shell */
+            .app-container {
+                width: 100%;
+                max-width: 420px;
+                height: 94vh;
+                background: #DDE6ED;
+                border-radius: 32px;
+                box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+                position: relative;
+                overflow: hidden;
+                border: 1px solid rgba(255,255,255,0.15);
+            }
+
+            /* Screen Master Layout Toggle States */
+            .screen { width: 100%; height: 100%; display: flex; flex-direction: column; position: absolute; top: 0; left: 0; transition: transform 0.4s ease-in-out; }
+            #splash-screen { background: radial-gradient(circle at top, #526D82, #27374D); justify-content: center; align-items: center; padding: 40px; text-align: center; z-index: 2; }
+            #chat-screen { transform: translateX(100%); z-index: 1; background: #DDE6ED; }
+            
+            /* Active transition override */
+            .app-container.active-chat #splash-screen { transform: translateX(-100%); }
+            .app-container.active-chat #chat-screen { transform: translateX(0); }
+
+            /* Splash View Components Layout */
+            .splash-logo { width: 120px; height: 120px; border-radius: 50%; border: 3px solid #9DB2BF; margin-bottom: 24px; object-fit: cover; }
+            .splash-title { color: #DDE6ED; font-size: 2rem; font-weight: 700; margin-bottom: 10px; }
+            .splash-subtitle { color: #9DB2BF; font-size: 1rem; margin-bottom: 40px; }
+            .btn-start { background: #9DB2BF; color: #27374D; font-weight: 700; font-size: 1.1rem; border: none; padding: 16px 44px; border-radius: 30px; cursor: pointer; transition: 0.2s; box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
+            .btn-start:hover { transform: translateY(-2px); background: #DDE6ED; }
+
+            /* Chat Brand-Header Component Layout */
+            .brand-header { background: #27374D; padding: 16px 20px; display: flex; align-items: center; border-bottom: 2px solid #526D82; gap: 14px; }
+            .header-logo { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 1px solid #9DB2BF; }
+            .header-info h1 { color: #DDE6ED; font-size: 1.2rem; font-weight: 700; }
+            .header-info p { color: #9DB2BF; font-size: 0.8rem; margin-top: 2px; }
+
+            /* Dynamic Interior Scroll Message Board Layout */
+            .message-board { flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth; }
+            .message-row { display: flex; align-items: flex-end; gap: 10px; max-width: 85%; }
+            .message-row.user-row { align-self: flex-end; flex-direction: row-reverse; }
+            .message-row.bot-row { align-self: flex-start; }
+            
+            .msg-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 1px solid #9DB2BF; }
+            .bubble { padding: 12px 16px; font-size: 0.95rem; line-height: 1.4; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+            
+            .user-row .bubble { background: #9DB2BF; color: #27374D; border-radius: 18px 18px 2px 18px; }
+            .bot-row .bubble { background: #526D82; color: #DDE6ED; border-radius: 18px 18px 18px 2px; }
+
+            /* Dynamic Actions Dock UI */
+            .actions-dock { background: #ffffff; padding: 14px 18px; border-top: 1px solid rgba(0,0,0,0.06); display: flex; align-items: center; gap: 12px; }
+            .text-box { flex-grow: 1; background: #F3F4F6; border: 1px solid #9DB2BF; padding: 12px 18px; border-radius: 24px; font-size: 0.95rem; color: #27374D; outline: none; }
+            .send-btn { background: #27374D; color: #DDE6ED; border: none; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 1.1rem; font-weight: bold; transition: 0.2s; }
+            .send-btn:hover { background: #526D82; }
+        </style>
+    </head>
+    <body>
+
+        <div class="app-container" id="shell">
+            
+            <div class="screen" id="splash-screen">
+                <img src="/static/logo.png" class="splash-logo" onerror="this.src='https://placehold.co/120?text=SafeX'">
+                <h1 class="splash-title">SafeX Solutions</h1>
+                <p class="splash-subtitle">Need our help now?</p>
+                <button class="btn-start" onclick="enterChatboard()">Get Started &gt;&gt;&gt;</button>
+            </div>
+
+            <div class="screen" id="chat-screen">
+                <div class="brand-header">
+                    <img src="/static/logo.png" class="header-logo" onerror="this.src='https://placehold.co/44?text=SX'">
+                    <div class="header-info">
+                        <h1>SafeX Solutions</h1>
+                        <p>● Live — Support Agent</p>
                     </div>
                 </div>
+
+                <div class="message-board" id="chat-board">
+                    <div class="message-row bot-row">
+                        <img src="/static/logo.png" class="msg-avatar" onerror="this.src='https://placehold.co/32?text=SX'">
+                        <div class="bubble">Hello! Welcome to SafeX Solutions. How can I assist you with our services today?</div>
+                    </div>
+                </div>
+
+                <div class="actions-dock">
+                    <input type="text" id="user-input" class="text-box" placeholder="Type your message here..." onkeydown="handleKey(event)">
+                    <button class="send-btn" onclick="sendMessage()">➔</button>
+                </div>
             </div>
-            <div class="tech-tag">LIVE CHAT</div>
+
         </div>
-    </div>
-""", unsafe_allow_html=True)
 
-# Container wrapping the scrollable chat feed elements
-st.markdown('<div class="chat-body-container">', unsafe_allow_html=True)
+        <script>
+            function enterChatboard() {
+                document.getElementById('shell').classList.add('active-chat');
+            }
 
-# Initialize message logs safely
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello! Welcome to SafeX Chat Live. How can I assist you with our tech and cybersecurity services today?"}]
+            function handleKey(e) {
+                if (e.key === 'Enter') sendMessage();
+            }
 
-# Render current history stack
-for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).markdown(msg["content"])
+            async function sendMessage() {
+                const input = document.getElementById('user-input');
+                const text = input.value.trim();
+                if (!text) return;
 
-# User action processing loop
-if user_prompt := st.chat_input("Message SafeX Solutions..."):
-    st.session_state.messages.append({"role": "user", "content": user_prompt})
-    st.chat_message("user").markdown(user_prompt)
+                input.value = '';
+                const board = document.getElementById('chat-board');
 
-    with st.chat_message("assistant"):
-        with st.spinner(""):
-            if rag_chain:
-                try:
-                    response = rag_chain.invoke(user_prompt)
-                    st.markdown(response)
-                except Exception as e:
-                    response = "I am currently experiencing a brief connectivity glitch. Please try your question again in a moment."
-                    st.markdown(response)
-            else:
-                response = "SafeX live support channels are undergoing minor system maintenance. Please check back shortly."
-                st.markdown(response)
-            
-    st.session_state.messages.append({"role": "assistant", "content": response})
+                // 1. Inject User Bubble
+                board.innerHTML += `
+                    <div class="message-row user-row">
+                        <div class="bubble">${text}</div>
+                    </div>
+                `;
+                board.scrollTop = board.scrollHeight;
 
-st.markdown('</div>', unsafe_allow_html=True)
+                // 2. Fetch API Output
+                try {
+                    const response = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: text })
+                    });
+                    const data = await response.json();
+
+                    // 3. Inject Assistant Bubble with Logo icon
+                    board.innerHTML += `
+                        <div class="message-row bot-row">
+                            <img src="/static/logo.png" class="msg-avatar" onerror="this.src='https://placehold.co/32?text=SX'">
+                            <div class="bubble">${data.reply}</div>
+                        </div>
+                    `;
+                } catch (err) {
+                    board.innerHTML += `
+                        <div class="message-row bot-row">
+                            <div class="bubble" style="background:#ef4444;">Connection failed to access support API stream.</div>
+                        </div>
+                    `;
+                }
+                board.scrollTop = board.scrollHeight;
+            }
+        </script>
+    </body>
+    </html>
+    """
+    return html_content
+
+if __name__ == "__main__":
+    import uvicorn
+    import os
+    
+    # Render assigns a dynamic port automatically via environment variables.
+    port = int(os.environ.get("PORT", 8000))
+    
+    # Launching via uvicorn with host set to 0.0.0.0 makes it publicly accessible
+    uvicorn.run("app:app", host="0.0.0.0", port=port)

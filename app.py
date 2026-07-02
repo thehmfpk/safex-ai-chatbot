@@ -91,7 +91,7 @@ async def get_ui():
             .app-container {
                 width: 100%;
                 max-width: 420px;
-                height: 94vh;
+                height: 95vh;
                 background: #DDE6ED;
                 border-radius: 32px;
                 box-shadow: 0 25px 60px rgba(0,0,0,0.5);
@@ -99,6 +99,22 @@ async def get_ui():
                 overflow: hidden;
                 border: 1px solid rgba(255,255,255,0.15);
             }
+
+            /* Keep your original .app-container code exactly as it is, then add this below it */
+
+@media (max-width: 480px) {
+    body, html {
+        align-items: flex-start; /* Forces the app container to align to the top instead of center */
+        padding-top: 5px;        /* This creates that exact "little gap from above" on a phone */
+        height: 95vh;
+    }
+
+    .app-container {
+        height: calc(95vh - 5px); /* Stretches the frame to perfectly sit right above the bottom nav bar */
+        border-radius: 24px 24px 24px 24px; /* Optional: keeps nice rounded corners on top, flat on bottom */
+        padding-bottom: 20px;
+    }
+}
 
             /* Screen Master Layout Toggle States */
             .screen { width: 100%; height: 100%; display: flex; flex-direction: column; position: absolute; top: 0; left: 0; transition: transform 0.4s ease-in-out; }

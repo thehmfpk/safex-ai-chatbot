@@ -1,10 +1,16 @@
 FROM python:3.11-slim
 
-WORKDIR /code
+# Tell the cloud server to work inside its own main directory
+WORKDIR /app
 
-COPY ./requirements.txt /code/requirements.txt
-RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+# Copy the requirements file from your folder straight into the cloud server
+COPY requirements.txt .
 
+# Install all the packages
+RUN pip install --no-cache-dir --upgrade -r requirements.txt
+
+# Copy everything else (app.py, logo.png, knowledge_base.txt) into the server
 COPY . .
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run your FastAPI app on Hugging Face's default port
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]

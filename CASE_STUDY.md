@@ -43,12 +43,12 @@ To resolve the cloud proxy health check failure, I optimized the configuration l
 ### 1. Landing Screen (User Portal)
 The application boots to a minimal, branded enterprise entry page featuring the SafeX Solutions corporate emblem and a call-to-action button, ensuring a friction-free entry point for end-users.
 
-![Landing Screen](Screenshot%202026-07-03%20121224.png)
+![Landing Screen](main.png)
 
 ### 2. Live Streamed Conversational Flow
 Once active, the chatbot interface supports clean bubble text messaging wrappers, corporate branding sidebars, and real-time semantic query processing.
 
-![Conversational Flow](Screenshot%202026-07-03%20121214.png)
+![Conversational Flow](chat.png)
 
 ## Key Learnings
 

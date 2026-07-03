@@ -248,12 +248,11 @@ async def get_ui():
     """
     return html_content
 
+
+import os
+
 if __name__ == "__main__":
     import uvicorn
-    import os
-    
-    # Render assigns a dynamic port automatically via environment variables.
-    port = int(os.environ.get("PORT", 8000))
-    
-    # Launching via uvicorn with host set to 0.0.0.0 makes it publicly accessible
+    # Read the port Hugging Face assigns, fallback to 7860 if empty
+    port = int(os.environ.get("PORT", 7860)) 
     uvicorn.run("app:app", host="0.0.0.0", port=port)

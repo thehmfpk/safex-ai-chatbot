@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+numpy
 langchain-core
 langchain-huggingface
 langchain-groq

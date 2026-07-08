@@ -38,17 +38,6 @@ To resolve the cloud proxy health check failure, I optimized the configuration l
 * **Immutable Port Configuration:** The application securely passes cloud network architecture health validations, shifting immediately from a broken reboot loop into a stable, live green **`RUNNING`** status.
 * **Cross-Environment Replicability:** Because it uses a multi-stage `Dockerfile`, the app operates exactly the same way in local environments as it does on live global cloud endpoints.
 
-## User Interface & Visuals
-
-### 1. Landing Screen
-The application boots to a minimal, branded enterprise entry page featuring the SafeX Solutions corporate emblem and a call-to-action button, ensuring a friction-free entry point for end-users.
-
-![Landing Screen](main.png)
-
-### 2. Live Streamed Conversational Flow
-Once active, the chatbot interface supports clean bubble text messaging wrappers, corporate branding sidebars, and real-time semantic query processing.
-
-![Conversational Flow](chat.png)
 
 ## Key Learnings
 

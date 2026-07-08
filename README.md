@@ -1,6 +1,6 @@
 # SafeX Solutions: Advanced AI Corporate Support Agent
 
-A production-ready, containerized **Retrieval-Augmented Generation (RAG)** conversational AI platform engineered to serve as a low-latency automated corporate support desk. This system securely processes localized internal company knowledge repositories, performs vector context alignment on-the-fly, and outputs token-streamed text generations powered by an asynchronous FastAPI infrastructure.
+A production-ready, containerized **Retrieval-Augmented Generation (RAG)** conversational AI platform engineered to serve as a low-latency automated corporate support desk. This system securely processes localized internal company knowledge repositories, performs vector context alignment on-the-fly, outputs token-streamed text generations powered by an asynchronous FastAPI infrastructure.
 
 ---
 

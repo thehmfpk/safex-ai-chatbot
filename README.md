@@ -141,7 +141,7 @@ This system was engineered and containerized by:
     </td>
     <td>
       <b>AI/ML Engineer</b><br />
-      Specializing in containerization, RAG pipeline orchestrations, and cloud-native application setups.
+      Specializing in containerization, RAG pipeline orchestrations, cloud-native application setups.
       <br /><br />
       <a href="https://github.com/thehmfpk"><img src="https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Badge" /></a>
       <a href="mailto:thehmfpk@gmail.com"><img src="https://img.shields.io/badge/Email-D14836?style=for-the-badge&logo=gmail&logoColor=white" alt="Email Badge" /></a>
